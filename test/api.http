@@ -1,2 +1,5 @@
 ### get Helloworld
 GET http://localhost:3000/
+
+### get iris
+GET http://localhost:3000/iris
