@@ -31,12 +31,12 @@ def load_and_prepare_data():
     return X, y, iris.target_names
 
 #------------------------------------------------------------------------------
-# モデルの训练と保存
+# モデルの訓練と保存
 #------------------------------------------------------------------------------
 
 def train_and_save_model(X, y):
-    """モデルを训练し、保存する"""
-    # データセットを训练用とテスト用に分割
+    """モデルを訓練し、保存する"""
+    # データセットを訓練用とテスト用に分割
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
@@ -44,7 +44,7 @@ def train_and_save_model(X, y):
     # K-Nearest Neighbors (KNN) モデルを作成
     knn = KNeighborsClassifier(n_neighbors=N_NEIGHBORS)
 
-    # モデルを训练
+    # モデルを訓練
     knn.fit(X_train, y_train)
 
     # テストデータで精度を評価
@@ -54,7 +54,7 @@ def train_and_save_model(X, y):
 
     # モデルを保存
     joblib.dump(knn, MODEL_FILE)
-    print("モデルを训练して保存しました。")
+    print("モデルを訓練して保存しました。")
 
 #------------------------------------------------------------------------------
 # モデルの読み込みと推論
@@ -77,7 +77,7 @@ def load_and_predict_model(X, target_names, new_data):
 #------------------------------------------------------------------------------
 
 def main(train_model):
-    """メイン処理: フラグに応じてモデルの训练または推論を行う"""
+    """メイン処理: フラグに応じてモデルの訓練または推論を行う"""
     # データの読み込み
     X, y, target_names = load_and_prepare_data()
 
