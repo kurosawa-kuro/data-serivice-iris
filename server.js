@@ -25,6 +25,33 @@ async function loadModel() {
 }
 
 /**
+ * Parses input data from query parameters.
+ * Expected format: "5.1,3.5,1.4,0.2"
+ * @param {object} query - The query object from Express.
+ * @returns {Array<number>} - Parsed numeric array of length 4.
+ */
+function parseInputData(query) {
+  if (query.data) {
+    const values = query.data.split(',').map(Number);
+    if (values.length !== 4 || values.some(isNaN)) {
+      throw new Error('Invalid data provided. Expected 4 numeric values separated by commas.');
+    }
+    return values;
+  }
+  // Default input data if no parameter is provided.
+  return [5.1, 3.5, 1.4, 0.2];
+}
+
+/**
+ * Prepares the input tensor for inference using provided data.
+ * @param {Array<number>} inputData - Array of 4 numeric values.
+ * @returns {Tensor} - The Tensor representing the input data.
+ */
+function prepareInputTensor(inputData) {
+  return new Tensor('float32', new Float32Array(inputData), [1, 4]);
+}
+
+/**
  * Serializes a tensor output by converting BigInt values to Number.
  * @param {object} tensorOutput - The output tensor from inference.
  * @returns {Array} - Array of converted tensor output values.
@@ -34,15 +61,6 @@ function serializeTensorOutput(tensorOutput) {
   return Array.from(rawData).map(value =>
     typeof value === 'bigint' ? Number(value) : value
   );
-}
-
-/**
- * Prepares the input tensor for inference.
- * @returns {Tensor} - The Tensor representing the input data.
- */
-function prepareInputTensor() {
-  const data = new Float32Array([5.1, 3.5, 1.4, 0.2]);
-  return new Tensor('float32', data, [1, 4]);
 }
 
 /**
@@ -68,7 +86,7 @@ function formatInferenceOutput(results) {
   const probabilitiesData = serializeTensorOutput(results['probabilities']);
   const predictedClass = CLASSES[labelData[0]];
 
-  // Convert probability to percentage string.
+  // Convert probability values to percentage string.
   const probabilities = {};
   for (let i = 0; i < probabilitiesData.length; i++) {
     probabilities[CLASSES[i]] = `${(probabilitiesData[i] * 100).toFixed(0)}%`;
@@ -95,7 +113,14 @@ app.get('/iris', async (req, res) => {
     return res.status(503).send('Model not ready');
   }
   
-  const inputTensor = prepareInputTensor();
+  let inputData;
+  try {
+    inputData = parseInputData(req.query);
+  } catch (err) {
+    return res.status(400).send(err.message);
+  }
+
+  const inputTensor = prepareInputTensor(inputData);
   try {
     const results = await performInference(inputTensor);
     const humanReadableResponse = formatInferenceOutput(results);

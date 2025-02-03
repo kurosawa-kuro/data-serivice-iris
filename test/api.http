@@ -1,5 +1,11 @@
-### get Helloworld
-GET http://localhost:3000/
-
 ### get iris
 GET http://localhost:3000/iris
+
+### get iris with data setosa
+GET http://localhost:3000/iris?data=5.1,3.5,1.4,0.2
+
+### get iris with data versicolor
+GET http://localhost:3000/iris?data=7.0,3.2,4.7,1.4
+
+### get iris with data virginica
+GET http://localhost:3000/iris?data=6.3,3.3,6.0,2.5
