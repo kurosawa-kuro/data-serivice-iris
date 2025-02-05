@@ -1,4 +1,12 @@
-# python3 iris_training_and_inference.py --train
+#!/usr/bin/env python3
+"""
+This script trains a K-Nearest Neighbors classifier on the Iris dataset,
+optionally converts the trained model to ONNX format, and performs inference.
+It supports the following command-line flags:
+  --train      Train the model and save it.
+  --convert    Convert the model to ONNX format.
+  --predict    Prediction input as a comma-separated list of 4 numeric values.
+"""
 
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
@@ -7,101 +15,160 @@ from sklearn.metrics import accuracy_score
 import joblib
 import argparse
 
+# For ONNX conversion
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+
 #------------------------------------------------------------------------------
-# 定数
+# Constants
 #------------------------------------------------------------------------------
 
-# モデル関連
 MODEL_FILE = 'iris_knn_model.pkl'
+ONNX_MODEL_FILE = 'iris_knn_model.onnx'
 N_NEIGHBORS = 3
 
-# データ関連
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 
 #------------------------------------------------------------------------------
-# データの読み込みと準備
+# Data loading and preparation
 #------------------------------------------------------------------------------
 
 def load_and_prepare_data():
-    """Iris データセットを読み込み、特徴量とラベルを返す"""
+    """
+    Load the Iris dataset and return the features, labels, and target names.
+    """
     iris = load_iris()
-    X = iris.data  # 特徴量
-    y = iris.target  # ラベル
+    X = iris.data            # Features
+    y = iris.target          # Labels
     return X, y, iris.target_names
 
 #------------------------------------------------------------------------------
-# モデルの訓練と保存
+# Model training and saving (joblib)
 #------------------------------------------------------------------------------
 
 def train_and_save_model(X, y):
-    """モデルを訓練し、保存する"""
-    # データセットを訓練用とテスト用に分割
+    """
+    Train the KNN model, evaluate its accuracy, save it as a pickle file,
+    and return the trained model.
+    """
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
 
-    # K-Nearest Neighbors (KNN) モデルを作成
     knn = KNeighborsClassifier(n_neighbors=N_NEIGHBORS)
-
-    # モデルを訓練
     knn.fit(X_train, y_train)
 
-    # テストデータで精度を評価
     y_pred = knn.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
-    print(f"モデルの精度: {accuracy:.2f}")
+    print(f"Model accuracy: {accuracy:.2f}")
 
-    # モデルを保存
     joblib.dump(knn, MODEL_FILE)
-    print("モデルを訓練して保存しました。")
+    print("Model trained and saved as pickle.")
+
+    return knn
 
 #------------------------------------------------------------------------------
-# モデルの読み込みと推論
+# ONNX model conversion and saving
 #------------------------------------------------------------------------------
 
-def load_and_predict_model(X, target_names, new_data):
-    """モデルを読み込み、新しいデータに対して推論する"""
-    # モデルを読み込み
+def convert_and_save_model(model):
+    """
+    Convert the given sklearn model to ONNX format and save it.
+    """
+    # Define the initial type for ONNX conversion (Iris features have 4 columns)
+    initial_type = [('float_input', FloatTensorType([None, 4]))]
+    # Disable zipmap option so that the output remains a tensor
+    options = {id(model): {'zipmap': False}}
+
+    onnx_model = convert_sklearn(model, initial_types=initial_type, options=options)
+
+    with open(ONNX_MODEL_FILE, "wb") as f:
+        f.write(onnx_model.SerializeToString())
+    print("ONNX model saved.")
+
+#------------------------------------------------------------------------------
+# Model loading and inference
+#------------------------------------------------------------------------------
+
+def load_and_predict_model(target_names, new_data):
+    """
+    Load the trained model from file and perform prediction on the provided new_data.
+    """
     knn = joblib.load(MODEL_FILE)
-    print("モデルを読み込みました。")
+    print("Model loaded from pickle.")
 
-    # 新しいデータに対する推論
     prediction = knn.predict(new_data)
-
-    # 予測結果を表示
-    print(f"予測結果: {target_names[prediction][0]}")
+    # Assuming prediction returns an array, extract the first element.
+    predicted_class = target_names[prediction[0]]
+    print("Prediction:", predicted_class)
 
 #------------------------------------------------------------------------------
-# メイン処理
+# Main processing
 #------------------------------------------------------------------------------
 
-def main(train_model):
-    """メイン処理: フラグに応じてモデルの訓練または推論を行う"""
-    # データの読み込み
+def main(train_model, convert_to_onnx, predict_input=None):
+    """
+    Main processing function:
+      - If train_model is True, train and save the model.
+        If convert_to_onnx is also True, convert the trained model to ONNX.
+      - If train_model is False and convert_to_onnx is True, load an existing model 
+        and convert it to ONNX.
+      - Otherwise, perform inference using the saved model. If predict_input is provided,
+        it will be used as prediction input; otherwise, a default sample input will be used.
+    """
     X, y, target_names = load_and_prepare_data()
 
-    # フラグに応じて処理を分岐
     if train_model:
-        train_and_save_model(X, y)
+        model = train_and_save_model(X, y)
+        if convert_to_onnx:
+            convert_and_save_model(model)
+    elif convert_to_onnx:
+        try:
+            model = joblib.load(MODEL_FILE)
+            print("Loaded model for ONNX conversion from pickle.")
+            convert_and_save_model(model)
+        except Exception as e:
+            print("Error loading model for conversion:", e)
     else:
-        # 新しいデータを定義
-        new_data = [[5.1, 3.5, 1.4, 0.2]]  # 例: setosa に近いデータ
-        load_and_predict_model(X, target_names, new_data)
+        if predict_input is not None:
+            try:
+                # Parse comma-separated numbers into a list of floats
+                features = list(map(float, predict_input.split(',')))
+                if len(features) != 4:
+                    raise ValueError("Exactly 4 numeric features are required for prediction.")
+                new_data = [features]
+            except Exception as e:
+                print("Error parsing prediction input:", e)
+                return
+        else:
+            # Default input if no prediction input is provided
+            new_data = [[5.1, 3.5, 1.4, 0.2]]
+        load_and_predict_model(target_names, new_data)
 
 #------------------------------------------------------------------------------
-# エントリーポイント
+# Entry point
 #------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # コマンドライン引数のパース
-    parser = argparse.ArgumentParser(description="Iris データセットのモデル訓練と推論")
+    parser = argparse.ArgumentParser(
+        description="Iris KNN model training, conversion to ONNX, and inference"
+    )
     parser.add_argument(
         "--train",
         action="store_true",
-        help="モデルを訓練する場合はこのフラグを指定"
+        help="Set this flag to train the model"
+    )
+    parser.add_argument(
+        "--convert",
+        action="store_true",
+        help="Set this flag to convert the model to ONNX format"
+    )
+    parser.add_argument(
+        "--predict",
+        type=str,
+        help="Comma-separated numeric features for prediction, e.g., '5.1,3.5,1.4,0.2'"
     )
     args = parser.parse_args()
 
-    # メイン処理を実行
-    main(args.train)
+    main(args.train, args.convert, args.predict)
